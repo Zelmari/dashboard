@@ -9,7 +9,10 @@ use ratatui::{
 
 use crate::{
     system::{ProcessInfo, SortBy},
-    theme::{self, border_style, dim_style, header_style, selected_style, title_style},
+    theme::{
+        self, border_style, dim_style, header_style, process_name_color,
+        selected_style, title_style,
+    },
 };
 
 pub fn draw(
@@ -30,12 +33,12 @@ pub fn draw(
         .border_style(border_style());
 
     let widths = [
-        Constraint::Length(7),  // PID
-        Constraint::Min(16),    // NAME  (flexible)
-        Constraint::Length(8),  // CPU%
-        Constraint::Length(10), // MEM
-        Constraint::Length(8),  // STATUS
-        Constraint::Length(7),  // USER
+        Constraint::Length(7),
+        Constraint::Min(16),
+        Constraint::Length(8),
+        Constraint::Length(10),
+        Constraint::Length(8),
+        Constraint::Length(7),
     ];
 
     let header = Row::new(vec![
@@ -62,28 +65,25 @@ pub fn draw(
 
     let mut state = TableState::default();
     state.select(Some(selected_index));
-
     f.render_stateful_widget(table, area, &mut state);
 }
 
-fn build_row(i: usize, p: &ProcessInfo, selected: usize) -> Row<'static> {
-    let is_sel = i == selected;
-
-    let cpu_color = if is_sel {
-        theme::TEXT_HIGHLIGHT
-    } else {
-        theme::gauge_color(p.cpu_percent as f64 / 100.0)
-    };
-
-    let sel_or = |style: ratatui::style::Style| if is_sel { selected_style() } else { style };
+fn build_row(rank: usize, p: &ProcessInfo, selected: usize) -> Row<'static> {
+    let is_sel    = rank == selected;
+    let name_col  = process_name_color(rank);
+    let cpu_color = if is_sel { theme::TEXT_HIGHLIGHT }
+                    else { theme::gauge_color(p.cpu_percent as f64 / 100.0) };
+    let sel_or    = |s: Style| if is_sel { selected_style() } else { s };
 
     Row::new(vec![
-        Cell::from(Span::styled(p.pid.to_string(),                sel_or(dim_style()))),
-        Cell::from(Span::styled(truncate(&p.name, 18),            sel_or(Style::default().fg(theme::TEXT)))),
-        Cell::from(Span::styled(format!("{:.1}%", p.cpu_percent), Style::default().fg(cpu_color))),
-        Cell::from(Span::styled(human_bytes(p.mem_bytes as f64),  sel_or(dim_style()))),
-        Cell::from(Span::styled(p.status.clone(),                 sel_or(dim_style()))),
-        Cell::from(Span::styled(truncate(&p.user, 7),             sel_or(dim_style()))),
+        Cell::from(Span::styled(p.pid.to_string(), sel_or(dim_style()))),
+        Cell::from(Span::styled(truncate(&p.name, 18),
+            if is_sel { selected_style() } else { Style::default().fg(name_col) })),
+        Cell::from(Span::styled(format!("{:.1}%", p.cpu_percent),
+            Style::default().fg(cpu_color))),
+        Cell::from(Span::styled(human_bytes(p.mem_bytes as f64), sel_or(dim_style()))),
+        Cell::from(Span::styled(p.status.clone(), sel_or(dim_style()))),
+        Cell::from(Span::styled(truncate(&p.user, 7), sel_or(dim_style()))),
     ])
 }
 
@@ -99,11 +99,6 @@ fn make_header(label: &'static str, column: SortBy, active: SortBy) -> Cell<'sta
 }
 
 fn truncate(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        s.to_string()
-    } else {
-        let mut t: String = s.chars().take(max - 1).collect();
-        t.push('…');
-        t
-    }
+    if s.chars().count() <= max { s.to_string() }
+    else { let mut t: String = s.chars().take(max-1).collect(); t.push('…'); t }
 }

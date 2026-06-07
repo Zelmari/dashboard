@@ -1,0 +1,12 @@
+[package]
+name = "dashboard"
+version = "0.1.0"
+edition = "2021"
+description = "A system dashboard for the terminal"
+
+[dependencies]
+ratatui = "0.26"
+crossterm = "0.27"
+sysinfo = { version = "0.27", default-features = false }
+human_bytes = "0.4"
+anyhow = "1.0"

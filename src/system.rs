@@ -3,14 +3,11 @@ use sysinfo::{CpuExt, PidExt, ProcessExt, ProcessStatus, System, SystemExt};
 use std::collections::VecDeque;
 
 pub const CPU_HISTORY_LEN: usize = 60;
-
 pub const ACTIVITY_THRESHOLD: f32 = 5.0;
 
 #[derive(Debug, Clone)]
 pub struct CoreInfo {
-    /// e.g. "C0", "C1" …
     pub name: String,
-    /// 0.0 – 100.0
     pub usage: f32,
 }
 
@@ -108,7 +105,6 @@ impl SystemInfo {
         let mut sys = System::new_all();
         sys.refresh_all();
         sys.refresh_all();
-
         Ok(Self {
             sys,
             cpu_history: VecDeque::with_capacity(CPU_HISTORY_LEN),
@@ -170,10 +166,16 @@ impl SystemInfo {
     }
 
     fn build_mem_data(&self) -> MemData {
+        let total     = self.sys.total_memory();
+        let available = self.sys.available_memory();
+        // sysinfo's used_memory() on macOS includes file cache, which reports
+        // ~97% on a healthy system. btop uses total - available instead,
+        // reflecting actual application memory pressure. We do the same.
+        let used = total.saturating_sub(available);
         MemData {
-            total_bytes:     self.sys.total_memory(),
-            used_bytes:      self.sys.used_memory(),
-            available_bytes: self.sys.available_memory(),
+            total_bytes:      total,
+            used_bytes:       used,
+            available_bytes:  available,
             swap_total_bytes: self.sys.total_swap(),
             swap_used_bytes:  self.sys.used_swap(),
         }

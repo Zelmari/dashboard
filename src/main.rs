@@ -22,10 +22,13 @@ fn main() -> Result<()> {
     let refresh_ms = parse_refresh_arg().unwrap_or(DEFAULT_REFRESH_MS);
 
     let mut app = App::new(refresh_ms)
-        .context("Failed to initialise system collector. Do you have permission to read /proc?")?;
+        .context("Failed to initialise system collector")?;
 
-    let mut terminal = setup_terminal().context("Failed to set up terminal")?;
+    let mut terminal = setup_terminal()
+        .context("Failed to set up terminal")?;
 
+    // Panic hook: restore terminal before printing the panic message,
+    // otherwise the terminal stays in raw mode and becomes unusable.
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let _ = disable_raw_mode();
@@ -35,37 +38,42 @@ fn main() -> Result<()> {
 
     let result = run_app(&mut terminal, &mut app);
 
-    restore_terminal(&mut terminal).context("Failed to restore terminal")?;
+    // Always restore — even if the event loop returned an error.
+    restore_terminal(&mut terminal)
+        .context("Failed to restore terminal")?;
 
-    result.context("Event loop exited with an error")?;
-
+    result.context("Event loop error")?;
     Ok(())
 }
 
-fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App) -> Result<()> {
+fn run_app(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    app: &mut App,
+) -> Result<()> {
     let tick_duration = Duration::from_millis(app.refresh_ms);
     let mut last_tick = Instant::now();
 
     loop {
         terminal.draw(|f| ui::draw(f, app))?;
 
-        let elapsed = last_tick.elapsed();
-        let timeout = tick_duration.saturating_sub(elapsed);
+        let timeout = tick_duration.saturating_sub(last_tick.elapsed());
 
         if event::poll(timeout).context("Failed to poll for events")? {
             match event::read().context("Failed to read event")? {
                 Event::Key(key) => {
+                    // Ctrl-C is the only exit. No q, no Esc.
                     if key.modifiers.contains(KeyModifiers::CONTROL)
                         && key.code == KeyCode::Char('c')
                     {
                         app.should_quit = true;
                     } else {
-                        app.on_key(key.code);
+                        // Pass modifiers so on_key can handle Ctrl-N / Ctrl-P.
+                        app.on_key(key.code, key.modifiers);
                     }
                 }
                 Event::Resize(_, _) => {}
-                Event::Mouse(_) => {}
-                _ => {}
+                Event::Mouse(_)     => {}
+                _                   => {}
             }
         }
 
@@ -87,8 +95,8 @@ fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)
         .context("Failed to enter alternate screen")?;
-    let backend = CrosstermBackend::new(stdout);
-    Terminal::new(backend).context("Failed to create terminal")
+    Terminal::new(CrosstermBackend::new(stdout))
+        .context("Failed to create terminal")
 }
 
 fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
@@ -97,8 +105,7 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Re
         terminal.backend_mut(),
         LeaveAlternateScreen,
         DisableMouseCapture
-    )
-    .context("Failed to leave alternate screen")?;
+    ).context("Failed to leave alternate screen")?;
     terminal.show_cursor().context("Failed to show cursor")?;
     Ok(())
 }

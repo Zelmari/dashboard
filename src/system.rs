@@ -38,6 +38,7 @@ pub enum SortBy {
 }
 
 impl SortBy {
+    #[allow(dead_code)]
     pub fn next(self) -> Self {
         match self {
             SortBy::Cpu    => SortBy::Memory,
@@ -75,6 +76,7 @@ pub enum Trend {
     Stable,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct ActiveProcess {
     pub pid: u32,
@@ -91,6 +93,8 @@ pub struct Snapshot {
     pub mem: MemData,
     pub processes: Vec<ProcessInfo>,
     pub active: Vec<ActiveProcess>,
+
+    #[allow(dead_code)]
     pub uptime_secs: u64,
 }
 
